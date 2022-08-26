@@ -15,6 +15,7 @@ font = pg.font.SysFont("", 20)
 
 screen = pg.display.set_mode(WINDOW_SIZE)
 clock = pg.time.Clock()
+screen.set_clip()
 
 
 def get_color_of_light(color, light):
@@ -85,35 +86,13 @@ class Points(Object):
 
 
 class PolygonLines(Points):
-    def __init__(self, positions, closed=True, color=WHITE):
+    def __init__(self, positions, closed=True, color=WHITE, fill=False):
         super(PolygonLines, self).__init__(positions, color)
         self.closed = closed
+        self.fill = fill
 
     def draw(self, surface, lst_pos2d_light):
-        first = None
-        last = None
-        for i in range(1, len(lst_pos2d_light)):
-            if lst_pos2d_light[i - 1] and lst_pos2d_light[i]:
-                pg.draw.line(surface, get_color_of_light(self.color, lst_pos2d_light[i][1]),
-                             lst_pos2d_light[i - 1][0], lst_pos2d_light[i][0], width=2)
-                if self.closed:
-                    if first is None:
-                        first = lst_pos2d_light[i - 1]
-                    last = lst_pos2d_light[i][0]
-        if self.closed and first and last:
-            pg.draw.line(surface, get_color_of_light(self.color, first[1]),
-                         first[0], last, width=2)
-
-
-class WallFill(PolygonLines):
-    def __init__(self, position_1, position_2, height, color=WHITE):
-        super(WallFill, self).__init__([
-            position_1, position_2, position_2 + Vector3(0, 0, height),
-                                    position_1 + Vector3(0, 0, height),
-        ], color=color, closed=True)
-
-    def draw(self, surface, lst_pos2d_light):
-        if all(lst_pos2d_light):
+        if self.fill and all(lst_pos2d_light):
             draw_poligon(surface, get_color_of_light(self.color, lst_pos2d_light[0][1]),
                          lst_pos2d_light[0][0], lst_pos2d_light[1][0],
                          lst_pos2d_light[2][0], lst_pos2d_light[3][0],
@@ -121,7 +100,35 @@ class WallFill(PolygonLines):
             # pg.draw.polygon(surface, get_color_of_light(self.color, lst_pos2d_light[0][1]),
             #                 list(map(lambda x: x[0], lst_pos2d_light)))
         else:
-            super(WallFill, self).draw(surface, lst_pos2d_light)
+            first = None
+            last = None
+            for i in range(1, len(lst_pos2d_light)):
+                if lst_pos2d_light[i - 1] and lst_pos2d_light[i]:
+                    pg.draw.line(surface, get_color_of_light(self.color, lst_pos2d_light[i][1]),
+                                 lst_pos2d_light[i - 1][0], lst_pos2d_light[i][0], width=2)
+                    if self.closed:
+                        if first is None:
+                            first = lst_pos2d_light[i - 1]
+                        last = lst_pos2d_light[i][0]
+            if self.closed and first and last:
+                pg.draw.line(surface, get_color_of_light(self.color, first[1]),
+                             first[0], last, width=2)
+
+
+class WallFill(PolygonLines):
+    def __init__(self, position_1, position_2, height, color=WHITE):
+        super(WallFill, self).__init__([
+            position_1, position_2, position_2 + Vector3(0, 0, height),
+                                    position_1 + Vector3(0, 0, height),
+        ], color=color, closed=True, fill=True)
+
+
+class FloorFill(WallFill):
+    def __init__(self, position, size, color=WHITE):
+        super(WallFill, self).__init__([
+            position, position + Vector3(size[0], 0, 0), position + Vector3(size[0], size[0], 0),
+                      position + Vector3(0, size[1], 0),
+        ], color=color, closed=True, fill=False)
 
 
 class Line(Points):
@@ -183,6 +190,7 @@ class WallCube(ObjectGroup):
             WallFill(position + Vector3(-half_w, -half_w, 0), position + Vector3(half_w, -half_w, 0), height, color),
             WallFill(position + Vector3(-half_w, half_w, 0), position + Vector3(-half_w, -half_w, 0), height, color),
             WallFill(position + Vector3(half_w, half_w, 0), position + Vector3(half_w, -half_w, 0), height, color),
+            Point(position, color)
         ])
 
 
@@ -198,16 +206,20 @@ class Camera:
         self.half_w, self.half_h = self.w // 2, self.h // 2
         self.focal_length = self.half_w / math.tan(self.fov_angle / 2)
         self.lst_render_objects = []
+        self.world_transform_calculated = False
 
         debug("focal_length", self.focal_length)
 
     def render(self, surface):
-        w = self.player.world
-        self.lst_render_objects = []
-        for obj in w.objects:
-            if obj is not self.player:
-                self.render_object(surface, obj)
-        self.lst_render_objects.sort(key=lambda x: x[1], reverse=True)
+        if not self.player.camera_pos_calculated:
+            w = self.player.world
+            self.lst_render_objects = []
+            for obj in w.objects:
+                if obj is not self.player:
+                    self.render_object(surface, obj)
+            self.lst_render_objects.sort(key=lambda x: x[1], reverse=True)
+            self.player.camera_pos_calculated = True
+        self.draw_sky(surface)
         for f in self.lst_render_objects:
             f[0]()
 
@@ -229,8 +241,8 @@ class Camera:
         # obj_pos = obj_pos.rotate_z_rad(self.player.rotation.z)
         angle_z = self.player.rotation.z
         vec_to = (obj_pos - my_pos)
-        vec_to.rotate_z_ip_rad(angle_z)
-        vec_to.rotate_x_ip_rad(self.player.rotation.x)
+        vec_to.rotate_z_rad_ip(angle_z)
+        vec_to.rotate_x_rad_ip(self.player.rotation.x)
         dist_y = vec_to.y
         # print(dist_y, self.focal_length)
         if dist_y <= 0:
@@ -246,6 +258,16 @@ class Camera:
             return (x, y), light
         return x, y
 
+    def draw_sky(self, surface):
+        y = self.half_h - math.tan(self.player.rotation.x) * self.focal_length
+        # if y < 0:
+        #     surface.fill()
+        if y > self.h:
+            surface.fill(color_sky)
+        else:
+            pg.draw.rect(surface, color_sky, (0, 0, self.w, y))
+            # pg.draw.rect(surface, color_sky, (0, 0, self.w, y))
+
 
 class World:
     def __init__(self, objects: list = []):
@@ -259,48 +281,65 @@ class Player(Object):
     def __init__(self, position: Vector3, rotation: Angle3 = Angle3.zero()):
         super(Player, self).__init__(position, rotation)
         self.world: World = None
-        self.speed = 1
-        self.rot_speed = math.pi / 100
+        self.speed = 0.5
+        self.rot_speed = 0.001
         self.color = GREEN
+        self.camera_pos_calculated = False
 
     def set_world(self, p_world):
         self.world = p_world
         self.world.add_object(self)
 
-    def update(self):
-        self.control_keys()
-        self.control_mouse()
+    def update(self, elapsed_time):
+        self.control_keys(elapsed_time)
+        self.control_mouse(elapsed_time)
 
-    def control_keys(self):
+    def control_keys(self, elapsed_time):
         keys = pg.key.get_pressed()
+        speed = self.speed * elapsed_time
+        rot_speed = self.rot_speed * elapsed_time
+        if keys[pg.K_q] or keys[pg.K_e] or keys[pg.K_LEFT] or keys[pg.K_RIGHT] or keys[pg.K_UP] or keys[pg.K_DOWN] or \
+                keys[pg.K_w] or keys[pg.K_s] or keys[pg.K_a] or keys[pg.K_d]:
+            self.camera_pos_calculated = False
         if keys[pg.K_q]:
-            self.position.z -= self.speed
+            self.position.z -= speed
         if keys[pg.K_e]:
-            self.position.z += self.speed
+            self.position.z += speed
         if keys[pg.K_LEFT]:
-            self.rotation.z -= self.rot_speed
+            self.rotation.z -= rot_speed
         elif keys[pg.K_RIGHT]:
-            self.rotation.z += self.rot_speed
+            self.rotation.z += rot_speed
+        if keys[pg.K_UP]:
+            self.rotation.x += rot_speed
+        elif keys[pg.K_DOWN]:
+            self.rotation.x -= rot_speed
+        self.rotation.x = max(-1.45, min(1.45, self.rotation.x))
         vec_speed = Vector3(0, 0, 0)
         if keys[pg.K_w]:
-            vec_speed = Vector3(math.sin(self.rotation.z), math.cos(self.rotation.z), 0) * self.speed
+            vec_speed = Vector3(math.sin(self.rotation.z), math.cos(self.rotation.z), 0)
         elif keys[pg.K_s]:
-            vec_speed = Vector3(-math.sin(self.rotation.z), -math.cos(self.rotation.z), 0) * self.speed
+            vec_speed = Vector3(-math.sin(self.rotation.z), -math.cos(self.rotation.z), 0)
         if keys[pg.K_a]:
-            vec_speed += Vector3(-math.cos(self.rotation.z), math.sin(self.rotation.z), 0) * self.speed
+            vec_speed += Vector3(-math.cos(self.rotation.z), math.sin(self.rotation.z), 0)
         elif keys[pg.K_d]:
-            vec_speed += Vector3(math.cos(self.rotation.z), -math.sin(self.rotation.z), 0) * self.speed
-        self.position += vec_speed
+            vec_speed += Vector3(math.cos(self.rotation.z), -math.sin(self.rotation.z), 0)
+        self.position += vec_speed * speed
 
-    def control_mouse(self):
+    def control_mouse(self, elapsed_time):
         if pg.mouse.get_focused():
             mouse_pos = pg.mouse.get_pos()
             new_mouse_pos = W_WIDTH // 2, W_HEIGHT // 2
+            pg.draw.line(screen, RED, new_mouse_pos, mouse_pos)
             pg.mouse.set_pos(new_mouse_pos)
+            rz = (mouse_pos[0] - new_mouse_pos[0]) / 100 * elapsed_time * MOUSE_SENSITIVITY
+            rx = (mouse_pos[1] - new_mouse_pos[1]) / 100 * elapsed_time * MOUSE_SENSITIVITY
+            print(mouse_pos, rz, rx)
+            if rz != 0 or rx != 0:
+                self.camera_pos_calculated = False
 
-            self.rotation.z += (mouse_pos[0] - new_mouse_pos[0]) / 100
-            self.rotation.x += (mouse_pos[1] - new_mouse_pos[1]) / 100
-            self.rotation.x = max(-1.6, min(1.6, self.rotation.x))
+            self.rotation.z += rz
+            self.rotation.x += rx
+            self.rotation.x = max(-1.45, min(1.45, self.rotation.x))
 
 
 class MiniMap:
@@ -327,11 +366,12 @@ class MiniMap:
 
 
 cnt = 20
-lst = [WallCube(Vector3(randint(-4, 4) * 50, randint(-4, 4) * 50, -50), 50, 100) for i in range(cnt)]
+lst = [WallCube(Vector3(randint(-4, 4) * 50, randint(-4, 4) * 50, 0), 50, 100) for i in range(cnt)]
 # polygon = PolygonLines(list(map(lambda x: x.position, lst)))
 world = World([SystemCoord(Vector3(0, 0, 0), 25),
+               FloorFill(Vector3(-200, -200, 0), (400, 400))
                ] + lst)
-player = Player(Vector3(-10, -500, 0))
+player = Player(Vector3(-00, -0, 50))
 player.set_world(world)
 
 camera = Camera(player, WINDOW_SIZE)
@@ -339,16 +379,17 @@ mini_map = MiniMap((0, 200, 100, 100), 20, player)
 
 running = True
 while running:
+    elapsed_time = clock.tick(FPS)
+
     screen.fill("#000000")
     for event in pg.event.get():
-        if event.type == pg.QUIT:
+        if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
             running = False
-    player.update()
+
     camera.render(screen)
+    player.update(elapsed_time)
     mini_map.draw(screen)
     screen.blit(font.render(f"{int(clock.get_fps())}fps", False, "#00FF00"), (5, 5))
     screen.blit(font.render(str(player.position), False, "#00FF00"), (5, 25))
     screen.blit(font.render(str(player.rotation), False, "#00FF00"), (5, 45))
     pg.display.flip()
-
-    clock.tick()
