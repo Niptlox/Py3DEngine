@@ -17,8 +17,10 @@ def rotation_matrix(axis, theta):
                      [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                      [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-v = [3, 5, 0]
-axis = [4, 4, 1]
-theta = 1.2
-print(np.dot(rotation_matrix(axis, theta), v))
-# [ 2.74911638  4.77180932  1.91629719]
+if __name__ == '__main__':
+
+    v = [3, 5, 0]
+    axis = [4, 4, 1]
+    theta = 1.2
+    print(np.dot(rotation_matrix(axis, theta), v))
+    # [ 2.74911638  4.77180932  1.91629719]

@@ -14,6 +14,7 @@ pg.init()
 desktop_size = pg.display.get_desktop_sizes()[0]
 print("desktop_size", desktop_size)
 W_WIDTH, W_HEIGHT = 720, 480
+W_WIDTH, W_HEIGHT = 1240, 720
 HALF_W_WIDTH, HALF_W_HEIGHT = W_WIDTH // 2, W_HEIGHT // 2
 # W_WIDTH, W_HEIGHT = desktop_size
 WINDOW_SIZE = W_WIDTH, W_HEIGHT
@@ -27,6 +28,6 @@ MOUSE_SENSITIVITY = 0.1
 # CAMERA settings =====
 
 color_floor = BLACK
-color_sky = WHITE
+color_sky = BLACK
 
 
