@@ -98,7 +98,7 @@ class None3D:
             self._global_position = self._owner.global_position + self._local_position
         else:
             self._global_position = (
-                        self._owner.global_position + self._owner.get_matrix_rotation() * self._local_position)
+                    self._owner.global_position + self._owner.get_matrix_rotation() * self._local_position)
         return self._global_position
 
     @position.setter
@@ -139,6 +139,12 @@ class VertexPoint(None3D):
         if self.flag & OBJECT_FLAG_VISIBLE:
             self.flag ^= OBJECT_FLAG_VISIBLE
         position_from_camera = self.global_position - camera.global_position
+
+        # vec_to = position_from_camera
+        # vec_to.rotate_y_rad_ip(camera.rotation.y)
+        # vec_to.rotate_x_rad_ip(camera.rotation.x)
+        # vec_at_camera = vec_to
+
         vec_at_camera = camera.get_matrix_rotation() * position_from_camera
         self.dist_to_camera = dist = vec_at_camera[2]
         if dist == 0:
@@ -168,8 +174,7 @@ class Object3d(None3D):
         self.matrix_rotation = MatrixRotation3(Vector3(rotation))
         self.flag |= OBJECT_FLAG_NOT_CALC_GLOBAL + OBJECT_FLAG_MOVING
         self.points: List[VertexPoint] = init_points_from_lst(self, points_lst, flag=self.flag & OBJECT_FLAG_MAP)
-        # TODO: расчитаm max рaдиус удаления точек от объекта
-        self.max_radius = -1
+        self.max_radius2 = max([(self.position - pnt.position).length_squared() for pnt in self.points]) if self.points else 0
         self.ext_points = []
         self.edges = edges
         self.faces = list(faces)
@@ -184,7 +189,12 @@ class Object3d(None3D):
             self.polygons = [Polygon(self, [self.points[p[0]] for p in face], normal=self.normals[face[0][2]],
                                      flag=POLYGON_FLAG_HAVE_NORMAL) for face in self.faces]
         self.tact_3d = TACT_RESTART
-        # TODO: разобрать точки на внешние и внутрение
+        # : разобрать точки на внешние и внутрение
+
+    def __copy__(self):
+        points_lst = [pnt.local_position for pnt in self.points]
+        return self.__class__(self.owner, self.position, points_lst, [], faces=self.faces, normals=self.normals,
+                              rotation=self.rotation, flag=self.flag)
 
     @property
     def rotation(self):
@@ -305,7 +315,7 @@ class Polygon:
 
         self._center_point = VertexPoint(owner, self.get_center_position(), flag=OBJECT_FLAG_NOT_CALC_GLOBAL)
 
-        self._init_normal_point = VertexPoint(owner, self._center_point.position + Vector3(normal) * 5,
+        self._init_normal_point = VertexPoint(owner, self._center_point.local_position + Vector3(normal) * 5,
                                               flag=OBJECT_FLAG_NOT_CALC_GLOBAL + POINT_FLAG_NORMAL)
         if flag & POLYGON_FLAG_HAVE_NORMAL:
             self.normal: Vector3 = self.update_normal()
@@ -314,7 +324,7 @@ class Polygon:
             self.normal: Vector3 = Vector3(0)
 
     def get_center_position(self):
-        return sum([pnt.position for pnt in self.points], Vector3(0)) / len(self.points)
+        return sum([pnt.local_position for pnt in self.points], Vector3(0)) / len(self.points)
 
     def update_normal(self):
         self.normal = (self._init_normal_point.position - self._center_point.position).normalize()
@@ -386,6 +396,8 @@ def create_box(owner, position, size3, flag=0):
              (7, 6), (6, 5), (5, 4), (4, 7), ]
     faces = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (1, 2, 6, 5), (3, 2, 6, 7), (0, 3, 7, 4)]
     normals = [(0, 1, 0), (0, -1, 0), (-1, 0, 0), (0, 0, -1), (1, 0, 0), (0, 0, 1)]
+    faces = [(1, 2, 6, 5)]
+    normals = [(0, 0, -1)]
     edges = convert_faces_to_lines(faces)
     return Object3d(owner, position, points3, edges, faces, normals, flag=flag)
 
@@ -443,7 +455,7 @@ class Camera(None3D):
         self.focus = self.half_w / math.tan(self.fov / 2)
         # init property enable
         self._active = True
-        self._visible_distance = 100
+        self._visible_distance = 500
         self._visible_distance2 = self._visible_distance ** 2
         self.matrix_rotation = MatrixRotation3(rotation)
         self.polygons = CameraPolygons(self, self.scene)
@@ -461,9 +473,10 @@ class Camera(None3D):
     def object_is_visible(self, object3d: None3D):
         # TODO: Простая проверка виден ли объект на камере
         if isinstance(object3d, Object3d):
-            return True
+            return (
+                    object3d.global_position - self.global_position).length_squared() <= self._visible_distance2 + object3d.max_radius2
         elif isinstance(object3d, VertexPoint):
-            return (object3d.global_position ** 2 + self.global_position ** 2) <= self._visible_distance2
+            return (object3d.global_position - self.global_position).length_squared() <= self._visible_distance2
 
     @property
     def active(self):
@@ -530,10 +543,11 @@ class AppScene3D(App.Scene):
         self.scene3d = Scene3D()
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/GAMUNCUL1.obj", scale=8)
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/controllerVR.obj", scale=5)
-        self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/monkey1.obj", scale=8)
+        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/monkey1.obj", scale=8)
         # self.obj = Object3d(self.scene3d, (0, 0, 0), [], [], [])
 
         # self.obj2 = Object3d(self.scene3d, (0, 0, 0), [(0, 0, 0), (0, 10, 0)], [], [])
+        # self.obj2 = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/monkey1.obj", scale=8)
         self.obj2 = create_cube(None, (0, 1, 0), 10)
         # self.scene3d.add_static(self.obj2)
         # self.scene3d.add_static(obj)
@@ -547,30 +561,29 @@ class AppScene3D(App.Scene):
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_f:
                 self.rot_flag ^= 1
+            if event.key == pg.K_c:
+                obj = self.obj.__copy__()
+                self.scene3d.add_static(obj)
 
     def update_keys(self):
         keys = pg.key.get_pressed()
         speed = 0.1 * self.elapsed_time
         rot_speed = 0.001 * self.elapsed_time
-        # if keys[pg.K_w]:
-        #     self.camera.position = self.camera.position + Vector3(0, 0, speed)
-        # if keys[pg.K_s]:
-        #     self.camera.position = self.camera.position + Vector3(0, 0, -speed)
-        # if keys[pg.K_a]:
-        #     self.camera.position = self.camera.position + Vector3(-speed, 0, 0)
-        # if keys[pg.K_d]:
-        #     self.camera.position = self.camera.position + Vector3(speed, 0, 0)
+        camera = self.obj
+        # поворот объекта
+        rx, ry, rz = 0, 0, 0
         if keys[pg.K_LEFT]:
-            self.camera.set_rotation(self.camera.rotation + Vector3(0, -rot_speed, 0))
+            ry = -1
         elif keys[pg.K_RIGHT]:
-            self.camera.set_rotation(self.camera.rotation + Vector3(0, rot_speed, 0))
+            ry = 1
         if keys[pg.K_UP]:
-            self.camera.set_rotation(self.camera.rotation + Vector3(-rot_speed, 0, 0))
+            rx = -1
         elif keys[pg.K_DOWN]:
-            self.camera.set_rotation(self.camera.rotation + Vector3(rot_speed, 0, 0))
-
+            rx = 1
+        camera.set_rotation(camera.rotation + Vector3(rx, ry, rz) * rot_speed)
         vec_speed = Vector3(0, 0, 0)
-        ry = self.camera.rotation.y
+        # смещение
+        ry = camera.rotation.y
         if keys[pg.K_w]:
             vec_speed = Vector3(math.sin(ry), 0, math.cos(ry))
         elif keys[pg.K_s]:
@@ -583,7 +596,7 @@ class AppScene3D(App.Scene):
             vec_speed += Vector3(0, -1, 0)
         if keys[pg.K_e]:
             vec_speed += Vector3(0, 1, 0)
-        self.camera.position = self.camera.position + vec_speed * speed
+        camera.position = camera.position + vec_speed * speed
 
     def update(self):
         pg.display.set_caption(f"Cnt: {len(self.scene3d.static)};fps: {int(self.clock.get_fps())}")

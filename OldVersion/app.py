@@ -457,14 +457,6 @@ def main():
     sceleton = SkeletonRotate(*open_file_obj("monkey1.obj", 7, _convert_faces_to_lines=True), rotation=Angle3(math.pi / 2, 0, 0))
     world = World([SystemCoord(Vector3(0, 0, 0), 0), sceleton])
     player = Player(Vector3(-00, -32, 2), rotation=Angle3(0.0, 0, 0), mouse_control=False)
-    debuger.py
-    Draw2D.py
-    elmentary.py
-    Engine3D.py
-    hroot.py
-    ObjReader.py
-    Vectors.py
-    models
     player.set_world(world)
 
     camera = Camera(player, WINDOW_SIZE)

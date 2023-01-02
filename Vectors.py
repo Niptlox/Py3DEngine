@@ -465,6 +465,7 @@ def create_matrix_rotate3(rotate3):
            [sinx * sinz - siny * cosx * cosz, sinx * cosz + siny * sinz * cosx, cosx * cosy]]
     return mat
 
+
 # if __name__ == '__main__':
 #     p = PointN([1, 2, 3])
 #     p3 = Point3((5, 59, 3))
@@ -475,6 +476,8 @@ def create_matrix_rotate3(rotate3):
 
 
 Vector3 = pg.Vector3
+
+
 # class Vector3(pg.Vector3):
 #     @staticmethod
 #     def zero():
@@ -507,9 +510,11 @@ class MatrixRotation3:
                     self._cosz = cos(z)
                 self._matrix = [[self._cosy * self._cosz, -self._sinz * self._cosy, self._siny],
                                 [self._sinx * self._siny * self._cosz + self._sinz * self._cosx,
-                                 -self._sinx * self._siny * self._sinz + self._cosx * self._cosz, -self._sinx * self._cosy],
+                                 -self._sinx * self._siny * self._sinz + self._cosx * self._cosz,
+                                 -self._sinx * self._cosy],
                                 [self._sinx * self._sinz - self._siny * self._cosx * self._cosz,
-                                 self._sinx * self._cosz + self._siny * self._sinz * self._cosx, self._cosx * self._cosy]]
+                                 self._sinx * self._cosz + self._siny * self._sinz * self._cosx,
+                                 self._cosx * self._cosy]]
 
             elif MATRIX_CALC_MODE == 2:
                 if not self.calc_flag[0]:
@@ -540,8 +545,9 @@ class MatrixRotation3:
     def __mul__(self, other):
         if isinstance(other, Vector3) or (isinstance(other, list) and len(other) == 3):
             # _ =
-            if MATRIX_CALC_MODE in (1,2):
+            if MATRIX_CALC_MODE in (1, 2):
                 return mul_vector_matrix(other, self.get_matrix())
             elif MATRIX_CALC_MODE == 0:
-                return (other).rotate_x_rad(-self._rotation.x).rotate_y_rad(-self._rotation.y).rotate_z_rad(-self._rotation.z)
+                return (other).rotate_z_rad(-self._rotation.z).rotate_y_rad(-self._rotation.y).rotate_x_rad(
+                    -self._rotation.x)
             # return mul_vector_matrix(mul_vector_matrix(mul_vector_matrix(other, self._matrixes[0]), self._matrixes[1]), self._matrixes[2])
