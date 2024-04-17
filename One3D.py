@@ -1,7 +1,8 @@
-import math
 from time import sleep
 from typing import List
+import math
 import pygame as pg
+from math import cos, sin
 
 delta_rotation = math.pi / 18
 
@@ -68,11 +69,6 @@ POLYGON_FLAG_HAVE_NORMAL = 1
 POLYGON_FLAG_COMMON_NORMAL = 2
 
 PI2 = math.pi * 2
-
-import math
-import pygame as pg
-from math import cos, sin
-from constants import *
 
 TO_UNKNOWN = -1
 TO_N = 0
