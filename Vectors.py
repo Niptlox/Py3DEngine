@@ -28,7 +28,7 @@ Rotation_X = 1
 Rotation_Y = 2
 Rotation_Z = 3
 
-MATRIX_CALC_MODE = 0
+MATRIX_CALC_MODE = 1
 
 
 def vector_mod(vector, value):
@@ -548,6 +548,6 @@ class MatrixRotation3:
             if MATRIX_CALC_MODE in (1, 2):
                 return mul_vector_matrix(other, self.get_matrix())
             elif MATRIX_CALC_MODE == 0:
-                return (other).rotate_z_rad(-self._rotation.z).rotate_y_rad(-self._rotation.y).rotate_x_rad(
-                    -self._rotation.x)
+                return (other).rotate_z_rad(self._rotation.z).rotate_y_rad(self._rotation.y).rotate_x_rad(
+                    self._rotation.x)
             # return mul_vector_matrix(mul_vector_matrix(mul_vector_matrix(other, self._matrixes[0]), self._matrixes[1]), self._matrixes[2])

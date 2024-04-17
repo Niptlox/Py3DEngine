@@ -1,13 +1,7 @@
 import math
+from time import sleep
 from typing import List
-
 import pygame as pg
-
-from Draw2D import *
-from ObjReader import open_file_obj
-from Vectors import *
-from src import App
-from constants import *
 
 delta_rotation = math.pi / 18
 
@@ -16,7 +10,7 @@ NUMPY_POINT = False
 SHOW_POINTS = False
 SHOW_EDGES = False
 SHOW_POLYGONS = True
-SHOW_NORMALS = True
+SHOW_NORMALS = False
 
 ## изменяется при переходе к следующему состоянию сцены
 ## равен сумме
@@ -25,18 +19,637 @@ phase_3d = 0
 camera_3d = 0
 count_camera = 1
 
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+
+DEFAULT_COLOR_POINT = BLACK
+
+TO_UNKNOWN = -1
+TO_N = 0
+TO_NW = 1
+TO_W = 2
+TO_EW = 3
+TO_E = 4
+TO_ES = 5
+TO_S = 6
+TO_NS = 7
+TO_OFFSET = [
+    (0, -1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1)
+]
+
+TACT_RESTART = 0
+PHASE_OBJECT = 1  # фаза для перещета кординат точек объёков в обёкте
+PHASE_MAP = 2  # фаза пересщета локальных кординат объёков в глобальные
+PHASE_CAMERA = 3  # пересщет координат из глобальных в координаты камеры
+PHASE_SCREEN = 4  # экранные координыты точки для текущей камеры просчитаны
+PHASE_COUNT = 5
+
+OBJECT_FLAG_MAP = 1  # в мировых координатах
+OBJECT_FLAG_STATIC = 2  # не двигается
+OBJECT_FLAG_MOVING = 4  # двигается
+OBJECT_FLAG_DEPENDENT = 8  # зависим от родителя
+OBJECT_FLAG_VISIBLE = 16  # объект можно увидеть на экране
+OBJECT_FLAG_NOT_CALC_GLOBAL = 32  # расчитаны глобальные координаты
+
+POINT_FLAG_NORMAL = 512  # это нормаль
+
+POLYGON_FLAG_HAVENT_NORMAL = 0
+POLYGON_FLAG_HAVE_NORMAL = 1
+POLYGON_FLAG_COMMON_NORMAL = 2
+
+PI2 = math.pi * 2
+
+import math
+import pygame as pg
+from math import cos, sin
+from constants import *
+
+TO_UNKNOWN = -1
+TO_N = 0
+TO_NW = 1
+TO_W = 2
+TO_EW = 3
+TO_E = 4
+TO_ES = 5
+TO_S = 6
+TO_NS = 7
+TO_OFFSET = [
+    (0, -1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1)
+]
+
+Rotation_0 = 0
+Rotation_X = 1
+Rotation_Y = 2
+Rotation_Z = 3
+
+MATRIX_CALC_MODE = 1
+
+
+def vector_mod(vector, value):
+    vector.x %= value
+    vector.y %= value
+    vector.z %= value
+    return vector
+
+
+def mul_matrix(a, b, c=None):
+    s = 3
+    if c is None:
+        c = [[0] * s for i in range(3)]
+    for i in range(s):
+        for j in range(s):
+            c[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j]
+    return c
+
+
+def crt_rotation_matrix(angle, rot_axis, c=None):
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return crt_rotation_matrix_pre(cos_a, sin_a, rot_axis, c=c)
+
+
+def crt_rotation_matrix_pre(cos_a, sin_a, rot_axis, c=None):
+    s = 3
+    if c is None:
+        c = [[0] * s for i in range(3)]
+    else:
+        for i in range(s):
+            for j in range(s):
+                c[i][j] = 0
+    c[0][0] = c[1][1] = c[2][2] = 1
+    if rot_axis == Rotation_0:
+        return c
+    # cos_a = math.cos(angle)
+    # sin_a = math.sin(angle)
+    if rot_axis == Rotation_X:
+        c[1][1] = cos_a
+        c[1][2] = sin_a
+        c[2][1] = -sin_a
+        c[2][2] = cos_a
+    elif rot_axis == Rotation_Y:
+        c[0][0] = cos_a
+        c[0][2] = sin_a
+        c[2][0] = -sin_a
+        c[2][2] = cos_a
+    elif rot_axis == Rotation_Z:
+        c[0][0] = cos_a
+        c[0][1] = sin_a
+        c[1][0] = -sin_a
+        c[1][1] = cos_a
+    return c
+
+
+def mul_vector_matrix(a, b, c=None):
+    s = 3
+    if c is None:
+        c = [0] * s
+    for j in range(s):
+        c[j] = a[0] * b[0][j] + a[1] * b[1][j] + a[2] * b[2][j]
+    return c
+
+
+def scalar_mul_vectors(a, b):
+    c = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+    return c
+
+
+def sub_vectors(a, b, c=None):
+    s = 3
+    if c is None:
+        c = [0] * s
+    for j in range(s):
+        c[j] = a[j] - b[j]
+    return c
+
+
+def sum_vectors(a, b, c=None):
+    s = 3
+    if c is None:
+        c = [0] * s
+    for j in range(s):
+        c[j] = a[j] + b[j]
+    return c
+
+
+def vector_mul_vector(a, b, c=None):
+    s = 3
+    if c is None:
+        c = [0] * 3
+    a1, a2, a3 = a
+    b1, b2, b3 = b
+    # i = [(a2 * b3 - b2 * a3), 0, 0]
+    # j = [0, (a1 * b3 - b1 * a3), 0]
+    # k = [0, 0, (a1 * b2 - b1 * a2)]
+    c[:] = [(a2 * b3 - b2 * a3), -(a1 * b3 - b1 * a3), (a1 * b2 - b1 * a2)]
+    return c
+
+
+class PointN:
+    def __init__(self, coords):
+        self.n = len(coords)
+        self.__coords = list(coords)
+        self._class = self.__class__
+
+    @property
+    def coords(self):
+        return self.__coords
+
+    @coords.setter
+    def coords(self, coords):
+        self.__coords = coords
+
+    def __getitem__(self, index):
+        if index >= self.n:
+            return 0
+        return self.__coords[index]
+
+    def __setitem__(self, index, value):
+        self.__coords[index] = value
+
+    def __str__(self):
+        return self.__class__.__name__ + str(tuple(self.coords))
+
+    def __repr__(self):
+        return str(self)
+
+    def __round__(self, n):
+        return self.__class__([round(x, n) for x in self.coords])
+
+    def copy(self):
+        return self.__class__(self.coords)
+
+
+class Point3(PointN):
+    def __init__(self, xyz):
+        super().__init__(xyz)
+
+    @property
+    def xyz(self):
+        return self.coords
+
+    @xyz.setter
+    def xyz(self, xyz):
+        self.coords = xyz
+
+    @property
+    def x(self):
+        return self[0]
+
+    @property
+    def y(self):
+        return self[1]
+
+    @property
+    def z(self):
+        return self[2]
+
+    @x.setter
+    def x(self, x):
+        self[0] = x
+
+    @y.setter
+    def y(self, y):
+        self[1] = y
+
+    @z.setter
+    def z(self, z):
+        self[2] = z
+
+
+class VectorN(PointN):
+    def __init__(self, vector):
+        super().__init__(vector)
+        self._class = VectorN
+
+    # def vectorMul(self, vector):
+    #     a1, a2, a3 = self.getXYZ()
+    #     b1, b2, b3 = vector.getXYZ()
+    #     ar = [(a2 * b3 - b2 * a3), -(a1 * b3 - b1 * a3), (a1 * b2 - b1 * a2)]
+    #     return Vector3(ar)
+
+    @property
+    def vector(self):
+        return self.coords
+
+    @vector.setter
+    def vector(self, vector):
+        self.coords = vector
+
+    def scalarMul(self, vector):
+        return sum([self[i] * vector[i] for i in range(self.n)])
+
+    def mul(self, cof):
+        return self._class([self[i] * cof for i in range(self.n)])
+
+    # /
+    def __truediv__(self, d):
+        return self.mul(1.0 / d)
+
+    # /
+    def __floordiv__(self, d):
+        return self.mul(1.0 / d)
+
+    # *
+    def __mul__(self, other):
+        if type(other) == self._class:
+            return self.scalarMul(other)
+        else:
+            return self.mul(other)
+
+    # +
+    def __add__(self, vector):
+        return self._class([self[j] + vector[j] for j in range(self.n)])
+
+    # -
+    def __sub__(self, vector):
+        return self._class([self[j] - vector[j] for j in range(self.n)])
+
+    # len
+    @property
+    def len(self):
+        return math.sqrt(self * self)
+
+    # Еденичный вектор
+    @property
+    def E(self):
+        if self.len != 0:
+            return self.copy() / self.len
+
+    # ==
+    def __eq__(self, other):
+        return self._class == type(other) and self.coords == other.coords
+
+    # !=
+    def __ne__(self, other):
+        return self._class == type(other) and self.coords != other.coords
+
+    @classmethod
+    def Zero(cls, n=3):
+        return cls([0] * n)
+
+
+class Vector3(VectorN, Point3):
+    n = 3
+
+    def __init__(self, xyz=(0, 0, 0)):
+        super().__init__(xyz)
+        self._class = self.__class__
+        # debugO(self, vars=True)
+
+    def vectorMul(self, vector):
+        a1, a2, a3 = self.vector
+        b1, b2, b3 = vector.vector
+        ar = [(a2 * b3 - b2 * a3), -(a1 * b3 - b1 * a3), (a1 * b2 - b1 * a2)]
+        return Vector3(ar)
+
+    # **
+    def __pow__(self, other):
+        return self.vectorMul(other)
+
+    @classmethod
+    def Zero(cls):
+        return cls([0] * cls.n)
+
+
+TLISTS = (tuple, list)
+
+
+def debug(param):
+    pass
+
+
+class Matrix:
+    def __init__(self, matrix):
+        if type(matrix) in TLISTS:
+            if type(matrix[0]) in TLISTS:
+                matrix = Matrix.createMatrix(matrix)
+        else:
+            raise Exception("Is not tuple")
+        self.M = matrix
+        self.n = len(matrix)
+
+    def copy(self):
+        M = [v.copy() for v in self.M]
+        return Matrix(M)
+
+    @property
+    def matrix(self):
+        return self.M
+
+    def det(self):
+        m = self.M
+        return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - \
+            m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + \
+            m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+
+    def detCol(self, xc):
+        M = [v.copy() for v in self.M]
+        n = self.n
+        for i in range(n):
+            M[i][xc] = M[i][n]
+        return Matrix(M).det()
+
+    def kramer(self):
+        ort = self.det()
+        if ort == 0:
+            return 0
+        n = self.n
+        v = [0] * n
+        for i in range(n):
+            v[i] = self.detCol(i) / ort
+        return v
+
+    def solve(self):
+        debug("===MATRIX SOLVE===")
+        M = self.M
+        debug("Start M:", *M, sep="\n")
+        n = self.n
+        debug("M", M)
+        self.MM = self.copy()
+
+        # ar = [-1] * n
+        # an = [-1] * n
+        # for i in range(n):
+        #     pr1, pr2 = -1, 0
+        #     pn1, pn2 = -1, 0
+        #     for j in range(n):
+        #         if M[i][j] != 0:
+        #             pr1 = j
+        #             pr2 += 1
+        #         else:
+        #             pn1 = j
+        #             pn2 += 1
+        #     if pr2 == 1:
+        #         if ar[pr1] == -1:
+        #             ar[pr1] = i
+        #         else:
+        #             return 0
+        #     if pn2 == 1:
+        #         if an[pn1] == -1:
+        #             an[pn1] = i
+        #         else:
+        #             return 0
+        # oM = M[:]
+        # for i in range(n):
+        #     iSt = ar[i]
+        #     if iSt != -1:
+        #         if iSt != i:
+        #             M[i] = oM[iSt]
+        #
+
+        i = 0
+        while i < n:
+            j = i + 1
+            while j < n:
+                if (M[j][j] == 0.0) and (M[i][j] != 0.0) and (M[j][i] != 0.0):
+                    M[i], M[j] = M[j], M[i]
+                    break
+                j += 1
+
+            Mii = M[i][i]
+            if Mii == 0:
+                j = i + 1
+                while j < n and M[j][i] == 0:
+                    j += 1
+                if j == n:
+                    return 0
+                    # debug("Exception", M)
+                    # raise Exception("j == n")
+                if j > i:
+                    M[i], M[j] = M[j], M[i]
+
+                Mii = M[i][i]
+
+            if i > 0:
+                for j in range(i):
+                    Mij = M[i][j]
+                    if Mij != 0:
+                        Mj = M[j] * Mij
+                        if Mj[i] != M[i][i]:
+                            M[i] = M[i] - Mj
+                        else:
+                            k = i + 1
+
+                Mii = M[i][i]
+
+            if Mii == 0:
+                continue
+
+            if Mii != 1:
+                M[i] = M[i] / Mii
+
+            i += 1
+        debug("1 M:", *M, sep="\n")
+        res = [0] * n
+        for i in range(n - 1, -1, -1):
+            res[i] = M[i][n]
+            for j in range(i + 1, n):
+                Mij = M[i][j]
+                if Mij != 0:
+                    M[i][n] -= M[j][n] * Mij
+            res[i] = M[i][n]
+        debug("RES", res)
+        # for i in range(n-1, -1, -1):
+        #     for j in range(i + 1, n):
+        #         Mij = M[i][j]
+        #         if Mij != 0:
+        #             M[i] = M[i] - M[j] * Mij
+        #     res[i] = M[i][n]
+
+        return res
+
+    @classmethod
+    def createMatrix(cls, vecs):
+        n = len(vecs)
+        M = [None] * n
+        for i in range(n):
+            p, vec = vecs[i]
+            M[i] = VectorN((vec[0], vec[1], vec[2], vec * p))
+        return M
+
+
+def create_matrix_rotate3(rotate3):
+    # https://ru.wikipedia.org/wiki/%D0%9C%D0%B0%D1%82%D1%80%D0%B8%D1%86%D0%B0_%D0%BF%D0%BE%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0
+    # https://wikimedia.org/api/rest_v1/media/math/render/svg/ba4ec6507e4b6d47fb1e30e9e30734a18c02f157
+    x, y, z = rotate3[0], rotate3[1], rotate3[2]
+    sinx, siny, sinz = sin(x), sin(y), sin(z)
+    cosx, cosy, cosz = cos(x), cos(y), cos(z)
+    mat = [[cosy * cosz, -sinz * cosy, siny],
+           [sinx * siny * cosz + sinz * cosx, -sinx * siny * sinz + cosx * cosz, -sinx * cosy],
+           [sinx * sinz - siny * cosx * cosz, sinx * cosz + siny * sinz * cosx, cosx * cosy]]
+    return mat
+
+
+# if __name__ == '__main__':
+#     p = PointN([1, 2, 3])
+#     p3 = Point3((5, 59, 3))
+#     p3.x = 1
+#     print(p3.x)
+#     vn1 = VectorN((1, 1, 2, 10))
+#     vn2 = VectorN((1, 5, 2, 10))
+
+
+Vector3 = pg.Vector3
+
+
+# class Vector3(pg.Vector3):
+#     @staticmethod
+#     def zero():
+#         return Vector3(0, 0, 0)
+
+
+class MatrixRotation3:
+    def __init__(self, rotation):
+        self._rotation = Vector3(rotation)
+        # flags of calculated x, y, z
+        self.calc_flag = [False, False, False]
+
+        self._sinx, self._siny, self._sinz = 0, 0, 0
+        self._cosx, self._cosy, self._cosz = 0, 0, 0
+        self._matrix = None
+        self._matrixes = [None, None, None]
+
+    def get_matrix(self):
+        if not all(self.calc_flag):
+            x, y, z = self._rotation.xyz
+            if MATRIX_CALC_MODE == 1:
+                if not self.calc_flag[0]:
+                    self._sinx = sin(x)
+                    self._cosx = cos(x)
+                if not self.calc_flag[1]:
+                    self._siny = sin(y)
+                    self._cosy = cos(y)
+                if not self.calc_flag[2]:
+                    self._sinz = sin(z)
+                    self._cosz = cos(z)
+                self._matrix = [[self._cosy * self._cosz, -self._sinz * self._cosy, self._siny],
+                                [self._sinx * self._siny * self._cosz + self._sinz * self._cosx,
+                                 -self._sinx * self._siny * self._sinz + self._cosx * self._cosz,
+                                 -self._sinx * self._cosy],
+                                [self._sinx * self._sinz - self._siny * self._cosx * self._cosz,
+                                 self._sinx * self._cosz + self._siny * self._sinz * self._cosx,
+                                 self._cosx * self._cosy]]
+
+            elif MATRIX_CALC_MODE == 2:
+                if not self.calc_flag[0]:
+                    self._matrixes[0] = crt_rotation_matrix(x, Rotation_X)
+                if not self.calc_flag[1]:
+                    self._matrixes[1] = crt_rotation_matrix(y, Rotation_Y)
+                if not self.calc_flag[2]:
+                    self._matrixes[2] = crt_rotation_matrix(z, Rotation_Z)
+                self._matrix = mul_matrix(self._matrixes[2], mul_matrix(self._matrixes[1], self._matrixes[0]))
+        return self._matrix
+
+    def set_rotation(self, rotation):
+        if rotation.x != self._rotation.x:
+            self.calc_flag[0] = False
+        if rotation.y != self._rotation.y:
+            self.calc_flag[1] = False
+        if rotation.z != self._rotation.z:
+            self.calc_flag[2] = False
+        self._rotation = vector_mod(rotation, PI2)
+
+    @property
+    def rotation(self):
+        return self._rotation
+
+    def length_squared(self):
+        return self._rotation.length_squared()
+
+    def __mul__(self, other):
+        if isinstance(other, Vector3) or (isinstance(other, list) and len(other) == 3):
+            # _ =
+            if MATRIX_CALC_MODE in (1, 2):
+                return mul_vector_matrix(other, self.get_matrix())
+            elif MATRIX_CALC_MODE == 0:
+                return (other).rotate_z_rad(self._rotation.z).rotate_y_rad(self._rotation.y).rotate_x_rad(
+                    self._rotation.x)
+            # return mul_vector_matrix(mul_vector_matrix(mul_vector_matrix(other, self._matrixes[0]), self._matrixes[1]), self._matrixes[2])
+
 
 def get_color_of_light(color, light):
     return max(0, min(255, color[0] * light)), max(0, min(255, color[1] * light)), max(0, min(255, color[2] * light))
+
+
+DEF_LAMPS = [Vector3(-0.5, -1, 0.75).normalize()]
 
 
 def get_light_of_lamps(surface_normal, lamps):
     if lamps:
         lamp_vectors = [lamp.vector for lamp in lamps]
     else:
-        lamp_vectors = Vector3(-0.5, -1, 0.75).normalize(), -Vector3(-0.5, -1, -0.75).normalize()
-    light = sum([-surface_normal.dot(v) for v in lamp_vectors])
+        lamp_vectors = DEF_LAMPS
+    light = sum([max(-surface_normal.dot(v), 0) for v in lamp_vectors])
     return light
+
+
+def draw_point(camera, color, position2, r=2):
+    pg.draw.circle(camera.surface, color, position2, r)
+
+
+def draw_line(camera, color, position_1, position_2):
+    pg.draw.line(camera.surface, color, position_1, position_2, 1)
+
+
+def draw_polygon(camera, color, positions):
+    pg.draw.polygon(camera.surface, color, positions)
 
 
 iiiii = 0
@@ -408,6 +1021,66 @@ def create_box(owner, position, size3, flag=0):
     return Object3d(owner, position, points3, edges, faces, normals, flag=flag)
 
 
+def open_file_obj(path, scale=1, _convert_faces_to_lines=False, ):
+    if isinstance(scale, int):
+        scale = (scale, scale, scale)
+    with open(path, "r") as f:
+        lines = f.readlines()
+
+    vertexes = []
+    faces = []
+    normals = []
+    normals_of_face = {}
+    vertex_index_offset = 0
+    i = 0
+    for line in lines:
+        i += 1
+        if not line.replace(" ", "") or line[0] == "#":
+            continue
+        try:
+            b = line.split()[0]
+        except Exception as ex:
+            b = None
+            print(f"Warning line {i} open obj", line, ex)
+
+        if b == "o":
+            # object
+            vertex_index_offset = len(vertexes)
+        if b == "v":
+            split = line.split()
+            vertex = [float(split[i + 1]) * scale[i] for i in range(3)]
+            vertexes.append(vertex)
+        if b == "vn":
+            split = line.split()
+            normal = [float(split[i + 1]) for i in range(3)]
+            normals.append(normal)
+        if b == "f":
+            face = []
+            for st in line.split(" ")[1:]:
+                try:
+                    ar = list(map(lambda ii: int(ii) - 1 if ii else -1, st.split("/")))
+                except:
+                    print(line)
+                if len(ar) == 1:
+                    ar = [ar[0], None, None]
+                if len(ar) == 2:
+                    ar = [ar[0], None, ar[1]]
+                face.append(ar)
+            faces.append(face)
+    if _convert_faces_to_lines:
+        return vertexes, convert_faces_to_lines(faces), faces, normals
+    return vertexes, faces, normals
+
+
+def convert_faces_to_lines(faces):
+    lines = set()
+    for face in faces:
+        lines.add(tuple(sorted((face[0], face[-1]))))
+        lines |= {tuple(sorted((face[i], face[i + 1]))) for i in range(len(face) - 1)}
+
+    return lines
+
+
 def load_object_from_fileobj(owner, position, path, scale=1, flag=0):
     vertexes, faces, normals = open_file_obj(path, scale, _convert_faces_to_lines=False)
     print(f"Load model: {path}, vertexes: {len(vertexes)}, faces: {len(faces)}, normals: {len(normals)}")
@@ -540,95 +1213,24 @@ def clear_screen(screen):
     screen.fill("#000000")
 
 
-class AppScene3D(App.Scene):
-    def __init__(self, app) -> None:
-        super().__init__(app)
-        self.tact = 0
-
-        self.screen.fill(BLACK)
-        self.scene3d = Scene3D()
-        # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/GAMUNCUL1.obj", scale=8)
-        # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/controllerVR.obj", scale=5)
-        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/monkey1.obj", scale=8)
-        # self.obj = Object3d(self.scene3d, (0, 0, 0), [], [], [])
-
-        # self.obj2 = Object3d(self.scene3d, (0, 0, 0), [(0, 0, 0), (0, 10, 0)], [], [])
-        # self.obj2 = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/monkey1.obj", scale=8)
-        self.obj2 = create_cube(None, (0, 1, 0), 10)
-        # self.scene3d.add_static(self.obj2)
-        # self.scene3d.add_static(obj)
-        self.scene3d.add_static(self.obj)
-        self.camera = Camera(self.scene3d, self.scene3d, self.screen, (0, 0, -50), (0, 0, 0), background=(10, 10, 10))
-        self.producer = Producer()
-        self.producer.add_camera(self.camera)
-        self.rot_flag = 0
-
-    def pg_event(self, event):
-        if event.type == pg.KEYDOWN:
-            if event.key == pg.K_f:
-                self.rot_flag ^= 1
-            if event.key == pg.K_c:
-                obj = self.obj.__copy__()
-                self.scene3d.add_static(obj)
-
-    def update_keys(self):
-        keys = pg.key.get_pressed()
-        speed = 0.1 * self.elapsed_time
-        rot_speed = 0.001 * self.elapsed_time
-        camera = self.obj
-        # поворот объекта
-        rx, ry, rz = 0, 0, 0
-        if keys[pg.K_LEFT]:
-            ry = -1
-        elif keys[pg.K_RIGHT]:
-            ry = 1
-        if keys[pg.K_UP]:
-            rx = 1
-        elif keys[pg.K_DOWN]:
-            rx = -1
-        camera.set_rotation(camera.rotation + Vector3(rx, ry, rz) * rot_speed)
-        vec_speed = Vector3(0, 0, 0)
-        # смещение
-        ry = camera.rotation.y
-        if keys[pg.K_w]:
-            vec_speed = Vector3(math.sin(ry), 0, math.cos(ry))
-        elif keys[pg.K_s]:
-            vec_speed = Vector3(-math.sin(ry), 0, -math.cos(ry))
-        if keys[pg.K_a]:
-            vec_speed += Vector3(-math.cos(ry), 0, math.sin(ry))
-        elif keys[pg.K_d]:
-            vec_speed += Vector3(math.cos(ry), 0, -math.sin(ry))
-        if keys[pg.K_q]:
-            vec_speed += Vector3(0, -1, 0)
-        if keys[pg.K_e]:
-            vec_speed += Vector3(0, 1, 0)
-        camera.position = camera.position + vec_speed * speed
-
-    def update(self):
-        pg.display.set_caption(f"Cnt: {len(self.scene3d.static)};fps: {int(self.clock.get_fps())}")
-        rot_speed = 0.001 * self.elapsed_time
-        if self.rot_flag:
-            self.obj2.set_rotation(self.obj2.rotation + Vector3(rot_speed, 0, rot_speed))
-            self.obj.set_rotation(self.obj.rotation + Vector3(rot_speed, 0, 0))
-            # point = Object3d(self.scene3d, self.obj.points[1].position, [(0, 0, 0)], [], [])
-            # self.scene3d.add_static(point)
-            # for pos in self.obj2.points:
-            #     point = Object3d(self.scene3d, pos.position, [(0, 0, 0)], [], [])
-            #     self.scene3d.add_static(point)
-
-        self.producer.show()
-        pg.display.flip()
-        self.update_keys()
-
-
 def main():
     FPS = 600
-    width, height = 800, 800
-    pg.init()
-    screen = pg.display.set_mode((width, height), flags=pg.RESIZABLE)
-    app = App.App(screen, fps=FPS)
-    app.set_scene(AppScene3D(app))
-    app.main()
+    screen = pg.display.set_mode((720, 480), flags=pg.RESIZABLE)
+    running = True
+    obj = create_cube(None, (0, 1, 0), 10)
+
+    scene3d = Scene3D()
+    scene3d.add_static(obj)
+    camera = Camera(scene3d, scene3d, screen, (0, 0, -50), (0, 0, 0), background=(10, 10, 10))
+    producer = Producer()
+    producer.add_camera(camera)
+    while running:
+        [exit() for event in pg.event.get(pg.QUIT)]
+        screen.fill(BLACK)
+        obj.set_rotation(obj.rotation + Vector3(0.1, 0.1, 0))
+        producer.show()
+        pg.display.flip()
+        sleep(0.1)
 
 
 if __name__ == '__main__':
