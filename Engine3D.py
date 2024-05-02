@@ -13,8 +13,8 @@ delta_rotation = math.pi / 18
 
 NUMPY_POINT = False
 
-SHOW_POINTS = False
-SHOW_EDGES = False
+SHOW_POINTS = True
+SHOW_EDGES = True
 SHOW_POLYGONS = True
 SHOW_NORMALS = True
 
@@ -247,9 +247,9 @@ class Object3d(None3D):
         if self.flag & OBJECT_FLAG_MOVING:
             self.flag -= OBJECT_FLAG_MOVING
 
-    SHOW_POINTS = False
-    SHOW_EDGES = False
-    SHOW_POLYGONS = True
+    # SHOW_POINTS = False
+    # SHOW_EDGES = False
+    # SHOW_POLYGONS = True
 
     def show(self, camera, lamps):
         color = pg.color.Color(WHITE)
@@ -355,7 +355,7 @@ class Polygon:
                 camera.polygons.add(self)
 
     def show(self, camera, lamps):
-        if self.flag & OBJECT_FLAG_VISIBLE:
+        if self.flag & OBJECT_FLAG_VISIBLE and SHOW_POLYGONS:
             color = WHITE
             light = get_light_of_lamps(self.normal, lamps)
             points2d = [pnt.position2d_on_camera for pnt in self.points]
@@ -549,7 +549,7 @@ class AppScene3D(App.Scene):
         self.scene3d = Scene3D()
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/GAMUNCUL1.obj", scale=8)
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/controllerVR.obj", scale=5)
-        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/monkey1.obj", scale=8)
+        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/bedroom.obj", scale=8)
         # self.obj = Object3d(self.scene3d, (0, 0, 0), [], [], [])
 
         # self.obj2 = Object3d(self.scene3d, (0, 0, 0), [(0, 0, 0), (0, 10, 0)], [], [])
@@ -575,7 +575,7 @@ class AppScene3D(App.Scene):
         keys = pg.key.get_pressed()
         speed = 0.1 * self.elapsed_time
         rot_speed = 0.001 * self.elapsed_time
-        camera = self.obj
+        camera = self.camera
         # поворот объекта
         rx, ry, rz = 0, 0, 0
         if keys[pg.K_LEFT]:
@@ -623,7 +623,7 @@ class AppScene3D(App.Scene):
 
 def main():
     FPS = 600
-    width, height = 800, 800
+    width, height = 2560, 1440
     pg.init()
     screen = pg.display.set_mode((width, height), flags=pg.RESIZABLE)
     app = App.App(screen, fps=FPS)
