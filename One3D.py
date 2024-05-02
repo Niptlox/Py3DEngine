@@ -16,6 +16,7 @@ SHOW_POINTS |= SHOW_EDGES
 SHOW_POLYGONS = True
 SHOW_NORMALS = False
 IGNOR_NORMAL = False
+CUTTING_POLYGONS = 3
 
 NORMAL_COF = 15
 MIN_LIGHT = 35
@@ -929,12 +930,12 @@ class Surface3dMonocolor(Surface3d):
 
 
 class Polygon:
-    def __init__(self, owner, points: List[VertexPoint], flag=0, normal=(0, 0, 0), color=WHITE):
+    def __init__(self, owner, points: List[VertexPoint], flag=0, normal=(0, 0, 0), color=WHITE, cuttings=0):
         self.owner = owner
-        self.color = WHITE
+        self.color = color
         self.points = points
         self.flag = int(flag)
-
+        self.cuttings = cuttings
         self._init_normal = Vector3(normal)
         if self._init_normal.length() > 0:
             self._init_normal.normalize_ip()
@@ -960,15 +961,38 @@ class Polygon:
     def calc(self, camera):
         if self.flag & OBJECT_FLAG_VISIBLE:
             self.flag ^= OBJECT_FLAG_VISIBLE
-        if all(pnt.flag & OBJECT_FLAG_VISIBLE for pnt in self.points):
-            # vec = self.points[0].position - camera.position
+
+        vis_points: List[VertexPoint] = [pnt for pnt in self.points if pnt.flag & OBJECT_FLAG_VISIBLE]
+        if vis_points:
             vec = self._center_point.position - camera.position
             if self.owner.flag & OBJECT_FLAG_MOVING:
                 self.update_normal()
             # print(self.normal, vec, vec.dot(self.normal))
             if vec.dot(self.normal) < 0 or IGNOR_NORMAL:
                 self.flag |= OBJECT_FLAG_VISIBLE
-                camera.polygons.add(self)
+
+                if len(vis_points) == len(self.points):
+                    camera.polygons.add(self)
+                elif self.cuttings < CUTTING_POLYGONS and len(self.points) == 3:
+                    if len(vis_points) == 2:
+                        p1, p2 = vis_points
+                        p3 = [pnt for pnt in self.points if not pnt.flag & OBJECT_FLAG_VISIBLE][0]
+                    else:
+                        p1, p2, p3 = self.points
+                    p3_ = VertexPoint(p1.owner, p3.position + (p1.position - p3.position) / 2)
+                    p3_.calc(camera, _tact_3d)
+                    if not p3_.flag & OBJECT_FLAG_VISIBLE:
+                        p3_ = VertexPoint(p2.owner, p3.position + (p2.position - p3.position) / 2)
+                        p3_.calc(camera, _tact_3d)
+                        Polygon(self.owner, [p3, p1, p3_], flag=self.flag, normal=self.normal,
+                                color=self.color, cuttings=self.cuttings + 1).calc(camera)
+                    else:
+                        Polygon(self.owner, [p3, p2, p3_], flag=self.flag, normal=self.normal,
+                                color=self.color, cuttings=self.cuttings + 1).calc(camera)
+
+                    poly_1 = Polygon(self.owner, [p1, p2, p3_], flag=self.flag, normal=self.normal,
+                                     color=self.color, cuttings=self.cuttings + 1)
+                    poly_1.calc(camera)
 
     def show(self, camera, lamps):
         if self.flag & OBJECT_FLAG_VISIBLE:
