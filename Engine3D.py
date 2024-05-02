@@ -549,7 +549,7 @@ class AppScene3D(App.Scene):
         self.scene3d = Scene3D()
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/GAMUNCUL1.obj", scale=8)
         # self.obj = load_object_from_fileobj(self.scene3d, (0, 0, 0), "models/controllerVR.obj", scale=5)
-        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/bedroom.obj", scale=8)
+        self.obj = load_object_from_fileobj(self.scene3d, (0, 10, 0), "models/bedroom0.obj", scale=1)
         # self.obj = Object3d(self.scene3d, (0, 0, 0), [], [], [])
 
         # self.obj2 = Object3d(self.scene3d, (0, 0, 0), [(0, 0, 0), (0, 10, 0)], [], [])
@@ -623,7 +623,7 @@ class AppScene3D(App.Scene):
 
 def main():
     FPS = 600
-    width, height = 2560, 1440
+    width, height = 2560, 1440-100
     pg.init()
     screen = pg.display.set_mode((width, height), flags=pg.RESIZABLE)
     app = App.App(screen, fps=FPS)
