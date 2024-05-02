@@ -3,8 +3,9 @@ from typing import List, Tuple
 import math
 import pygame as pg
 from math import cos, sin
-
 import pygame.display
+from pygame import Vector3
+from pygame.math import Vector2
 
 delta_rotation = math.pi / 18
 
@@ -16,7 +17,8 @@ SHOW_POINTS |= SHOW_EDGES
 SHOW_POLYGONS = True
 SHOW_NORMALS = False
 IGNOR_NORMAL = False
-CUTTING_POLYGONS = 3
+CUTTING_POLYGONS = 1
+CUTTING_TYPE = 0
 
 NORMAL_COF = 15
 MIN_LIGHT = 35
@@ -206,328 +208,11 @@ def vector_mul_vector(a, b, c=None):
     return c
 
 
-class PointN:
-    def __init__(self, coords):
-        self.n = len(coords)
-        self.__coords = list(coords)
-        self._class = self.__class__
-
-    @property
-    def coords(self):
-        return self.__coords
-
-    @coords.setter
-    def coords(self, coords):
-        self.__coords = coords
-
-    def __getitem__(self, index):
-        if index >= self.n:
-            return 0
-        return self.__coords[index]
-
-    def __setitem__(self, index, value):
-        self.__coords[index] = value
-
-    def __str__(self):
-        return self.__class__.__name__ + str(tuple(self.coords))
-
-    def __repr__(self):
-        return str(self)
-
-    def __round__(self, n):
-        return self.__class__([round(x, n) for x in self.coords])
-
-    def copy(self):
-        return self.__class__(self.coords)
-
-
-class Point3(PointN):
-    def __init__(self, xyz):
-        super().__init__(xyz)
-
-    @property
-    def xyz(self):
-        return self.coords
-
-    @xyz.setter
-    def xyz(self, xyz):
-        self.coords = xyz
-
-    @property
-    def x(self):
-        return self[0]
-
-    @property
-    def y(self):
-        return self[1]
-
-    @property
-    def z(self):
-        return self[2]
-
-    @x.setter
-    def x(self, x):
-        self[0] = x
-
-    @y.setter
-    def y(self, y):
-        self[1] = y
-
-    @z.setter
-    def z(self, z):
-        self[2] = z
-
-
-class VectorN(PointN):
-    def __init__(self, vector):
-        super().__init__(vector)
-        self._class = VectorN
-
-    # def vectorMul(self, vector):
-    #     a1, a2, a3 = self.getXYZ()
-    #     b1, b2, b3 = vector.getXYZ()
-    #     ar = [(a2 * b3 - b2 * a3), -(a1 * b3 - b1 * a3), (a1 * b2 - b1 * a2)]
-    #     return Vector3(ar)
-
-    @property
-    def vector(self):
-        return self.coords
-
-    @vector.setter
-    def vector(self, vector):
-        self.coords = vector
-
-    def scalarMul(self, vector):
-        return sum([self[i] * vector[i] for i in range(self.n)])
-
-    def mul(self, cof):
-        return self._class([self[i] * cof for i in range(self.n)])
-
-    # /
-    def __truediv__(self, d):
-        return self.mul(1.0 / d)
-
-    # /
-    def __floordiv__(self, d):
-        return self.mul(1.0 / d)
-
-    # *
-    def __mul__(self, other):
-        if type(other) == self._class:
-            return self.scalarMul(other)
-        else:
-            return self.mul(other)
-
-    # +
-    def __add__(self, vector):
-        return self._class([self[j] + vector[j] for j in range(self.n)])
-
-    # -
-    def __sub__(self, vector):
-        return self._class([self[j] - vector[j] for j in range(self.n)])
-
-    # len
-    @property
-    def len(self):
-        return math.sqrt(self * self)
-
-    # Еденичный вектор
-    @property
-    def E(self):
-        if self.len != 0:
-            return self.copy() / self.len
-
-    # ==
-    def __eq__(self, other):
-        return self._class == type(other) and self.coords == other.coords
-
-    # !=
-    def __ne__(self, other):
-        return self._class == type(other) and self.coords != other.coords
-
-    @classmethod
-    def Zero(cls, n=3):
-        return cls([0] * n)
-
-
-class Vector3(VectorN, Point3):
-    n = 3
-
-    def __init__(self, xyz=(0, 0, 0)):
-        super().__init__(xyz)
-        self._class = self.__class__
-        # debugO(self, vars=True)
-
-    def vectorMul(self, vector):
-        a1, a2, a3 = self.vector
-        b1, b2, b3 = vector.vector
-        ar = [(a2 * b3 - b2 * a3), -(a1 * b3 - b1 * a3), (a1 * b2 - b1 * a2)]
-        return Vector3(ar)
-
-    # **
-    def __pow__(self, other):
-        return self.vectorMul(other)
-
-    @classmethod
-    def Zero(cls):
-        return cls([0] * cls.n)
-
-
 TLISTS = (tuple, list)
 
 
 def debug(param):
     pass
-
-
-class Matrix:
-    def __init__(self, matrix):
-        if type(matrix) in TLISTS:
-            if type(matrix[0]) in TLISTS:
-                matrix = Matrix.createMatrix(matrix)
-        else:
-            raise Exception("Is not tuple")
-        self.M = matrix
-        self.n = len(matrix)
-
-    def copy(self):
-        M = [v.copy() for v in self.M]
-        return Matrix(M)
-
-    @property
-    def matrix(self):
-        return self.M
-
-    def det(self):
-        m = self.M
-        return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - \
-            m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + \
-            m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
-
-    def detCol(self, xc):
-        M = [v.copy() for v in self.M]
-        n = self.n
-        for i in range(n):
-            M[i][xc] = M[i][n]
-        return Matrix(M).det()
-
-    def kramer(self):
-        ort = self.det()
-        if ort == 0:
-            return 0
-        n = self.n
-        v = [0] * n
-        for i in range(n):
-            v[i] = self.detCol(i) / ort
-        return v
-
-    def solve(self):
-        debug("===MATRIX SOLVE===")
-        M = self.M
-        debug("Start M:", *M, sep="\n")
-        n = self.n
-        debug("M", M)
-        self.MM = self.copy()
-
-        # ar = [-1] * n
-        # an = [-1] * n
-        # for i in range(n):
-        #     pr1, pr2 = -1, 0
-        #     pn1, pn2 = -1, 0
-        #     for j in range(n):
-        #         if M[i][j] != 0:
-        #             pr1 = j
-        #             pr2 += 1
-        #         else:
-        #             pn1 = j
-        #             pn2 += 1
-        #     if pr2 == 1:
-        #         if ar[pr1] == -1:
-        #             ar[pr1] = i
-        #         else:
-        #             return 0
-        #     if pn2 == 1:
-        #         if an[pn1] == -1:
-        #             an[pn1] = i
-        #         else:
-        #             return 0
-        # oM = M[:]
-        # for i in range(n):
-        #     iSt = ar[i]
-        #     if iSt != -1:
-        #         if iSt != i:
-        #             M[i] = oM[iSt]
-        #
-
-        i = 0
-        while i < n:
-            j = i + 1
-            while j < n:
-                if (M[j][j] == 0.0) and (M[i][j] != 0.0) and (M[j][i] != 0.0):
-                    M[i], M[j] = M[j], M[i]
-                    break
-                j += 1
-
-            Mii = M[i][i]
-            if Mii == 0:
-                j = i + 1
-                while j < n and M[j][i] == 0:
-                    j += 1
-                if j == n:
-                    return 0
-                    # debug("Exception", M)
-                    # raise Exception("j == n")
-                if j > i:
-                    M[i], M[j] = M[j], M[i]
-
-                Mii = M[i][i]
-
-            if i > 0:
-                for j in range(i):
-                    Mij = M[i][j]
-                    if Mij != 0:
-                        Mj = M[j] * Mij
-                        if Mj[i] != M[i][i]:
-                            M[i] = M[i] - Mj
-                        else:
-                            k = i + 1
-
-                Mii = M[i][i]
-
-            if Mii == 0:
-                continue
-
-            if Mii != 1:
-                M[i] = M[i] / Mii
-
-            i += 1
-        debug("1 M:", *M, sep="\n")
-        res = [0] * n
-        for i in range(n - 1, -1, -1):
-            res[i] = M[i][n]
-            for j in range(i + 1, n):
-                Mij = M[i][j]
-                if Mij != 0:
-                    M[i][n] -= M[j][n] * Mij
-            res[i] = M[i][n]
-        debug("RES", res)
-        # for i in range(n-1, -1, -1):
-        #     for j in range(i + 1, n):
-        #         Mij = M[i][j]
-        #         if Mij != 0:
-        #             M[i] = M[i] - M[j] * Mij
-        #     res[i] = M[i][n]
-
-        return res
-
-    @classmethod
-    def createMatrix(cls, vecs):
-        n = len(vecs)
-        M = [None] * n
-        for i in range(n):
-            p, vec = vecs[i]
-            M[i] = VectorN((vec[0], vec[1], vec[2], vec * p))
-        return M
 
 
 def create_matrix_rotate3(rotate3):
@@ -549,9 +234,6 @@ def create_matrix_rotate3(rotate3):
 #     print(p3.x)
 #     vn1 = VectorN((1, 1, 2, 10))
 #     vn2 = VectorN((1, 5, 2, 10))
-
-
-Vector3 = pg.Vector3
 
 
 # class Vector3(pg.Vector3):
@@ -646,6 +328,69 @@ class MatrixRotation3:
                 return (other).rotate_z_rad(self._rotation.z).rotate_y_rad(self._rotation.y).rotate_x_rad(
                     self._rotation.x)
             # return mul_vector_matrix(mul_vector_matrix(mul_vector_matrix(other, self._matrixes[0]), self._matrixes[1]), self._matrixes[2])
+
+
+def find_intersection_plane(plane_normal: Vector3, plane_point: Vector3, vector_direction: Vector3, vector_point):
+    """
+    Эта функция находит точку пересечения плоскости и вектора.
+
+    Args:
+      plane_normal: вектор, перпендикулярный плоскости.
+      plane_point: точка на плоскости.
+      vector_direction: вектор направления вектора.
+      vector_point: точка, из которой исходит вектор.
+
+    Returns:
+      Точка пересечения или None, если векторы параллельны.
+    """
+    # Проверка на параллельность
+    pdv = plane_normal.dot(vector_direction)
+    if pdv == 0:
+        return None
+    # Расстояние от точки на плоскости до плоскости
+    d = plane_normal.dot(plane_point - vector_point)
+    # Расстояние от точки на векторе до плоскости по направлению вектора
+    t = d / pdv
+    # Точка пересечения
+    intersection_point = vector_point + t * vector_direction
+    return intersection_point
+
+
+def det2d(m):
+    return m[0][0] * m[1][1] - m[0][1] * m[1][0]
+
+
+def find_intersection_lines2d(line1_point1: Vector2, line1_point2: Vector2, line2_point1: Vector2,
+                              line2_point2: Vector2) -> tuple:
+    """
+    Эта функция находит точку пересечения двух 2D-линий.
+
+    Args:
+      line1_point1: Координаты первой точки первой линии (tuple).
+      line1_point2: Координаты второй точки первой линии (tuple).
+      line2_point1: Координаты первой точки второй линии (tuple).
+      line2_point2: Координаты второй точки второй линии (tuple).
+
+    Returns:
+      Точка пересечения (tuple) или None, если линии не пересекаются.
+    """
+    A = (line2_point1[0] - line2_point2[0], line2_point2[1] - line2_point1[1])
+    B = (line1_point1[0] - line1_point2[0], line1_point2[1] - line1_point1[1])
+    C = (line2_point1[0] - line1_point1[0], line1_point1[1] - line2_point1[1])
+
+    det_AB = det2d([A, B])
+    det_AC = det2d([A, C])
+
+    # Проверка на параллельность
+    if det_AB == 0:
+        return None
+    # Расчет параметра t
+    t = det_AC / det_AB
+    line1_direction = line1_point2 - line1_point1
+    # line2_direction = line2_point2 - line2_point1
+    # Вычисление точки пересечения
+    intersection_point = (line1_point1[0] + t * line1_direction[0], line1_point1[1] + t * line1_direction[1])
+    return intersection_point
 
 
 def create_normal(p0: Vector3, p1, p2):
@@ -934,6 +679,7 @@ class Polygon:
         self.owner = owner
         self.color = color
         self.points = points
+        self.points2d_on_camera = []
         self.flag = int(flag)
         self.cuttings = cuttings
         self._init_normal = Vector3(normal)
@@ -969,10 +715,26 @@ class Polygon:
                 self.update_normal()
             # print(self.normal, vec, vec.dot(self.normal))
             if vec.dot(self.normal) < 0 or IGNOR_NORMAL:
-                self.flag |= OBJECT_FLAG_VISIBLE
-
                 if len(vis_points) == len(self.points):
+                    self.flag |= OBJECT_FLAG_VISIBLE
                     camera.polygons.add(self)
+                    self.points2d_on_camera = [pnt.position2d_on_camera for pnt in self.points]
+                elif CUTTING_TYPE == 1:
+                    self.points2d_on_camera = []
+                    for i in range(len(self.points)):
+                        p = self.points[i]
+                        if p.flag & OBJECT_FLAG_VISIBLE:
+                            self.points2d_on_camera.append(p.position2d_on_camera)
+                        else:
+                            p_last = self.points[i - 1]
+                            if p_last.flag & OBJECT_FLAG_VISIBLE:
+                                n_point = camera.cut_line2d(p_last.position2d_on_camera, p.position2d_on_camera)
+                                if n_point:
+                                    self.points2d_on_camera.append(n_point)
+                    if len(self.points2d_on_camera) >= 3:
+                        self.flag |= OBJECT_FLAG_VISIBLE
+                        camera.polygons.add(self)
+
                 elif self.cuttings < CUTTING_POLYGONS and len(self.points) == 3:
                     if len(vis_points) == 2:
                         p1, p2 = vis_points
@@ -997,8 +759,8 @@ class Polygon:
     def show(self, camera, lamps):
         if self.flag & OBJECT_FLAG_VISIBLE:
             light = get_light_of_lamps(self.normal, lamps)
-            points2d = [pnt.position2d_on_camera for pnt in self.points]
-            draw_polygon(camera, get_color_of_light(self.color, light), points2d)
+            # points2d = [pnt.position2d_on_camera for pnt in self.points]
+            draw_polygon(camera, get_color_of_light(self.color, light), self.points2d_on_camera)
             if SHOW_NORMALS:
                 self._init_normal_point.calc(camera, _tact_3d + PHASE_SCREEN)
                 # self._init_normal_point.show(camera, lamps, color="green")
@@ -1220,6 +982,24 @@ class Camera(None3D):
         self.matrix_rotation.matrix_calc_mode = 2
         self.polygons = CameraPolygons(self, self.scene)
 
+    def cut_line3d(self, point_1, point_2):
+        point = self.position
+        rect_points = self.get_rect_points3d()
+        rect_vectors = [p - point for p in rect_points]
+        normal_top = rect_vectors[0].cross(rect_vectors[1])
+        normal_left = rect_vectors[1].cross(rect_vectors[2])
+        normal_bottom = rect_vectors[2].cross(rect_vectors[3])
+        normal_right = rect_vectors[3].cross(rect_vectors[0])
+
+    def cut_line2d(self, point_1, point_2):
+        sr = self.surface_rect
+        rect_points = Vector2(sr.x, 0), Vector2(sr.w, 0), Vector2(sr.w, sr.h), Vector2(0, sr.h)
+        for i in range(4):
+            line = rect_points[i], rect_points[(i + 1) % 4]
+            rpoint = find_intersection_lines2d(line[0], line[1], Vector2(point_1), Vector2(point_2))
+            if rpoint and sr.collidepoint(*rpoint):
+                return rpoint
+
     @property
     def rotation(self):
         return self.matrix_rotation.rotation
@@ -1229,6 +1009,12 @@ class Camera(None3D):
 
     def get_matrix_rotation(self):
         return self.matrix_rotation
+
+    def get_rect_points3d(self):
+        rect_points = Vector3(-self.half_w, self.half_h, self.focus), Vector3(self.half_w, self.half_h, self.focus), \
+            Vector3(self.half_w, -self.half_h, self.focus), Vector3(-self.half_w, -self.half_h, self.focus)
+        m = self.get_matrix_rotation()
+        return [m * p for p in rect_points]
 
     def calc_point(self, global_position) -> Tuple[Tuple[float, float], float, bool]:
         position_from_camera = global_position - self.global_position
@@ -1338,7 +1124,7 @@ def main():
     w, h = pygame.display.Info().current_w, pygame.display.Info().current_h
     screen = pg.display.set_mode((w, h), flags=pg.RESIZABLE)
     running = True
-    # obj = create_cube(None, (0, 0, 0), 300)
+    obj = create_cube(None, (0, 0, 0), 300)
     obj = load_object_from_fileobj(None, (0, 0, 15), "models/bedroom.obj", scale=1)
     sys3d = create_sys_coord(None, Vector3(-30, 100, 15), (60, 34, 10), 1)
     scene3d = Scene3D()
