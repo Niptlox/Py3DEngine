@@ -17,8 +17,8 @@ SHOW_POINTS |= SHOW_EDGES
 SHOW_POLYGONS = True
 SHOW_NORMALS = False
 IGNOR_NORMAL = False
-CUTTING_POLYGONS = 1
-CUTTING_TYPE = 0
+CUTTING_POLYGONS = 0
+CUTTING_TYPE = 1
 
 NORMAL_COF = 15
 MIN_LIGHT = 35
@@ -361,7 +361,7 @@ def det2d(m):
 
 
 def find_intersection_lines2d(line1_point1: Vector2, line1_point2: Vector2, line2_point1: Vector2,
-                              line2_point2: Vector2) -> tuple:
+                              line2_point2: Vector2) -> Vector2:
     """
     Эта функция находит точку пересечения двух 2D-линий.
 
@@ -385,11 +385,11 @@ def find_intersection_lines2d(line1_point1: Vector2, line1_point2: Vector2, line
     if det_AB == 0:
         return None
     # Расчет параметра t
-    t = det_AC / det_AB
+    t = -det_AC / det_AB
     line1_direction = line1_point2 - line1_point1
     # line2_direction = line2_point2 - line2_point1
     # Вычисление точки пересечения
-    intersection_point = (line1_point1[0] + t * line1_direction[0], line1_point1[1] + t * line1_direction[1])
+    intersection_point = Vector2(line1_point1[0] + t * line1_direction[0], line1_point1[1] + t * line1_direction[1])      
     return intersection_point
 
 
@@ -725,12 +725,18 @@ class Polygon:
                         p = self.points[i]
                         if p.flag & OBJECT_FLAG_VISIBLE:
                             self.points2d_on_camera.append(p.position2d_on_camera)
-                        else:
-                            p_last = self.points[i - 1]
-                            if p_last.flag & OBJECT_FLAG_VISIBLE:
-                                n_point = camera.cut_line2d(p_last.position2d_on_camera, p.position2d_on_camera)
+                        elif p.dist_to_camera > 0:
+                            p2 = self.points[i - 1]
+                            if p2.flag & OBJECT_FLAG_VISIBLE:
+                                n_point = camera.cut_line2d(p2.position2d_on_camera, p.position2d_on_camera)
                                 if n_point:
                                     self.points2d_on_camera.append(n_point)
+                            p2 = self.points[(i + 1) % len(self.points)]
+                            if p2.flag & OBJECT_FLAG_VISIBLE:
+                                n_point = camera.cut_line2d(p2.position2d_on_camera, p.position2d_on_camera)
+                                if n_point:
+                                    self.points2d_on_camera.append(n_point)
+
                     if len(self.points2d_on_camera) >= 3:
                         self.flag |= OBJECT_FLAG_VISIBLE
                         camera.polygons.add(self)
@@ -739,8 +745,14 @@ class Polygon:
                     if len(vis_points) == 2:
                         p1, p2 = vis_points
                         p3 = [pnt for pnt in self.points if not pnt.flag & OBJECT_FLAG_VISIBLE][0]
+                        if p3.dist_to_camera < 0:
+                            return
                     else:
-                        p1, p2, p3 = self.points
+                        p1 = vis_points[0]
+                        p2, p3 = [pnt for pnt in self.points if not pnt.flag & OBJECT_FLAG_VISIBLE]
+                        if p2.dist_to_camera < 0 or p3.dist_to_camera < 0:
+                            return
+
                     p3_ = VertexPoint(p1.owner, p3.position + (p1.position - p3.position) / 2)
                     p3_.calc(camera, _tact_3d)
                     if not p3_.flag & OBJECT_FLAG_VISIBLE:
@@ -758,13 +770,18 @@ class Polygon:
 
     def show(self, camera, lamps):
         if self.flag & OBJECT_FLAG_VISIBLE:
+            # self._center_point.calc(camera, _tact_3d + PHASE_SCREEN)
             light = get_light_of_lamps(self.normal, lamps)
+            # z = self._center_point.dist_to_camera
+            # if z > 0:
+            #     light += 0.1
+            #     light *= (10000 - z) / 10000
             # points2d = [pnt.position2d_on_camera for pnt in self.points]
             draw_polygon(camera, get_color_of_light(self.color, light), self.points2d_on_camera)
             if SHOW_NORMALS:
                 self._init_normal_point.calc(camera, _tact_3d + PHASE_SCREEN)
                 # self._init_normal_point.show(camera, lamps, color="green")
-                self._center_point.calc(camera, _tact_3d + PHASE_SCREEN)
+
                 self._center_point.show(camera, lamps, color="green")
                 draw_line(camera, "red", self._center_point.position2d_on_camera,
                           self._init_normal_point.position2d_on_camera)
@@ -992,12 +1009,13 @@ class Camera(None3D):
         normal_right = rect_vectors[3].cross(rect_vectors[0])
 
     def cut_line2d(self, point_1, point_2):
+        p1, p2 = Vector2(point_1), Vector2(point_2)
         sr = self.surface_rect
         rect_points = Vector2(sr.x, 0), Vector2(sr.w, 0), Vector2(sr.w, sr.h), Vector2(0, sr.h)
         for i in range(4):
             line = rect_points[i], rect_points[(i + 1) % 4]
-            rpoint = find_intersection_lines2d(line[0], line[1], Vector2(point_1), Vector2(point_2))
-            if rpoint and sr.collidepoint(*rpoint):
+            rpoint = find_intersection_lines2d(line[0], line[1], p1, p2)
+            if rpoint is not None:
                 return rpoint
 
     @property
@@ -1124,8 +1142,8 @@ def main():
     w, h = pygame.display.Info().current_w, pygame.display.Info().current_h
     screen = pg.display.set_mode((w, h), flags=pg.RESIZABLE)
     running = True
-    obj = create_cube(None, (0, 0, 0), 300)
     obj = load_object_from_fileobj(None, (0, 0, 15), "models/bedroom.obj", scale=1)
+    # obj = create_cube(None, (0, 0, 0), 300)
     sys3d = create_sys_coord(None, Vector3(-30, 100, 15), (60, 34, 10), 1)
     scene3d = Scene3D()
     scene3d.add_static([obj, sys3d])
@@ -1133,7 +1151,10 @@ def main():
     producer = Producer()
     producer.add_camera(camera)
     clock = pg.time.Clock()
+    p1, p2 = Vector2(300, 900), Vector2(800, 900)
+    p3 = Vector2(w // 2, h // 2)
     while running:
+        p4 = Vector2(pg.mouse.get_pos())
         [exit() for event in pg.event.get(pg.QUIT)]
         # [camera.position.__add__(Vector3(0, 0, -1)) for event in pg.event.get(pg.KEYDOWN)]
         update_keys(camera, clock.tick(30))
@@ -1141,6 +1162,10 @@ def main():
         screen.fill(BLACK)
         # obj.set_rotation(obj.rotation + Vector3(0, 0.01, 0))
         producer.show()
+        draw_line(camera, "red", p1, p2)
+        draw_line(camera, "blue", p3, p4)
+        p = find_intersection_lines2d(p1, p2, p3, p4)
+        draw_point(camera, "green", p)
         pg.display.flip()
 
         # camera.focus -= 1
